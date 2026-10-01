@@ -578,7 +578,7 @@ def breakdown_col_headers():
     </tr>"""
 
 # ═══════════════════════════════════════════════════════════════
-#  SUMMARY REPORT  (one table per tier)
+#  SUMMARY REPORT
 # ═══════════════════════════════════════════════════════════════
 def summary_report_html(region_df, raw_df, all_delivered_df):
     TIER_LABELS={'T1':'Tier 1 — Metro','T2':'Tier 2 — Major Cities','T3':'Tier 3 — Rural'}
@@ -811,7 +811,7 @@ def store_breakdown_html(region_stores_agg, region_raw, all_delivered_df):
     return html
 
 # ═══════════════════════════════════════════════════════════════
-#  REGIONWISE BREAKDOWN  (one table per tier)
+#  REGIONWISE BREAKDOWN
 # ═══════════════════════════════════════════════════════════════
 def regionwise_breakdown_html(region_df, store_df, raw_df, all_delivered_df):
     TIER_LABELS={'T1':'Tier 1 — Metro','T2':'Tier 2 — Major Cities','T3':'Tier 3 — Rural'}
@@ -989,9 +989,14 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
         avg_excess = round(excess.mean()) if len(excess)>0 else 0
         stage_breach_info[stage] = {'count':bc,'pct':pct,'top':top3,'avg_excess':avg_excess}
 
-    sorted_stages = sorted(stage_breach_info.items(), key=lambda x: -x[1]['count'])
-    top_sg        = sorted_stages[0][0] if sorted_stages and sorted_stages[0][1]['count']>0 else None
-    top_sg_cnt    = sorted_stages[0][1]['count'] if top_sg else 0
+    # ── sorted by count → used ONLY for top_sg (network paragraph) & Recommended Actions
+    sorted_stages_by_count = sorted(stage_breach_info.items(), key=lambda x: -x[1]['count'])
+    top_sg     = sorted_stages_by_count[0][0] if sorted_stages_by_count and sorted_stages_by_count[0][1]['count']>0 else None
+    top_sg_cnt = sorted_stages_by_count[0][1]['count'] if top_sg else 0
+
+    # ✅ FIX 1 — Stage-wise RCA table uses FIXED CHRONOLOGICAL ORDER
+    STAGE_CHRONO = ['OP to INP', 'INP to PK', 'PK to BIN', 'InhouseSLA', 'BIN to RTS']
+    chrono_stages = [(s, stage_breach_info[s]) for s in STAGE_CHRONO if s in stage_breach_info]
 
     TIER_BG_MAP   = {'T1':'#1e293b','T2':'#1e3a5f','T3':'#1e4a3f'}
     TIER_FULL_MAP = {'T1':'Tier 1 — Metro','T2':'Tier 2 — Major Cities','T3':'Tier 3 — Rural'}
@@ -1195,6 +1200,7 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
   </p>
 </div>"""
 
+    # ── SECTION 2: TIER-WISE ANOMALY SUMMARY ─────────────────────
     html += """
 <div style='background:#fff;border:1px solid #e2e8f0;border-radius:10px;
             padding:18px 22px;margin-bottom:14px;border-left:4px solid #0891b2;'>
@@ -1234,15 +1240,22 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
                 f"OTR: <b style='color:{otr_tc};'>{otr_v}%</b> &nbsp;·&nbsp; "
                 f"MOD: <b style='color:{mod_tc};'>{mod_v}%</b><br>"
             )
+            # ✅ FIX 2 — "HIGH Risk Regions" and "MEDIUM Risk Regions"
             if td['high_region_names']:
-                t_para += (f"<span style='color:#dc2626;font-weight:700;'>■ HIGH regions:</span> "
-                           f"{high_list}. ")
+                t_para += (
+                    f"<span style='color:#dc2626;font-weight:700;'>"
+                    f"■ HIGH Risk Regions:</span> {high_list}. "
+                )
             if td['medium_region_names']:
-                t_para += (f"<span style='color:#ea580c;font-weight:700;'>■ MEDIUM regions:</span> "
-                           f"{medium_list}. ")
+                t_para += (
+                    f"<span style='color:#ea580c;font-weight:700;'>"
+                    f"■ MEDIUM Risk Regions:</span> {medium_list}. "
+                )
             if top_sc > 0:
-                t_para += (f"<br>Most frequently breached stage: <b>{top_s}</b> "
-                           f"({top_sc} of {td['total_regions']} regions breaching). ")
+                t_para += (
+                    f"<br>Most frequently breached stage: <b>{top_s}</b> "
+                    f"({top_sc} of {td['total_regions']} regions breaching). "
+                )
             if ws != "—":
                 t_para += f"Worst performing store by InhouseSLA: <b>{ws}</b>."
 
@@ -1271,6 +1284,7 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
 
     html += "\n</div>\n"
 
+    # ── SECTION 3: STAGE-WISE RCA TABLE (CHRONOLOGICAL ORDER) ────
     html += """
 <div style='background:#fff;border:1px solid #e2e8f0;border-radius:10px;
             padding:18px 22px;margin-bottom:14px;border-left:4px solid #d97706;'>
@@ -1296,7 +1310,8 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
     </thead>
     <tbody>"""
 
-    for stage, info in sorted_stages:
+    # ✅ Use chrono_stages (fixed order) for the RCA table
+    for stage, info in chrono_stages:
         limit = SLA_CONFIG[stage]['hard_limit']
         bc    = info['count']
         pct   = info['pct']
@@ -1345,6 +1360,7 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
   </table>
 </div>"""
 
+    # ── SECTION 4: RECOMMENDED ACTIONS (sorted by breach count — highest impact first)
     html += """
 <div style='background:#fff;border:1px solid #e2e8f0;border-radius:10px;
             padding:18px 22px;margin-bottom:14px;border-left:4px solid #16a34a;'>
@@ -1353,12 +1369,13 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
     &#9889; Recommended Actions
   </div>
   <div style='font-size:10px;color:#94a3b8;margin-bottom:14px;'>
-    Sorted by breach severity &nbsp;·&nbsp; Prioritise HIGH stages first &nbsp;·&nbsp;
+    Sorted by breach severity &nbsp;·&nbsp; Prioritise highest-impact stages first &nbsp;·&nbsp;
     All actions are guideline suggestions — validate with on-ground ops context before execution
   </div>"""
 
     shown = False
-    for stage, info in sorted_stages:
+    # Recommended Actions keep severity (count) sort for impact prioritisation
+    for stage, info in sorted_stages_by_count:
         if info['count'] == 0: continue
         shown  = True
         am     = ACTION_MAP.get(stage, {})
@@ -1425,6 +1442,7 @@ def generate_summary_snapshot_html(region_df, store_df, raw_df, all_delivered_df
   &nbsp; <b>InhouseSLA</b> = avg(OP→INP) + avg(INP→PK) + avg(PK→BIN) per region.
   &nbsp; All stage values are <b>region-level averages</b>.
   &nbsp; <b>Avg Excess</b> = mean overshoot above hard limit across breaching regions.
+  &nbsp; Stage-wise RCA table is in pipeline order · Recommended Actions sorted by breach count.
 </div>
 </div>"""
 
@@ -1560,7 +1578,6 @@ if uploaded_file is not None:
                 region_df, store_df, raw_df, all_delivered_df, filename
             )
 
-            # ── Success banner ─────────────────────────────────────
             mod_yes = int((all_delivered_df['MOD']=='1').sum())
             st.success(
                 f"✅ Report ready — "
@@ -1571,13 +1588,11 @@ if uploaded_file is not None:
                 f"MOD=1: {mod_yes:,}"
             )
 
-            # ── Filter stats ───────────────────────────────────────
             st.info(
                 f"🔍 Filter: {before:,} total rows → {after:,} kept "
                 f"(Delivered + SLA Key=Yes) · {before-after:,} excluded"
             )
 
-            # ── Download ───────────────────────────────────────────
             st.download_button(
                 label="⬇️ Download Full Report as HTML",
                 data=html_report.encode('utf-8'),
@@ -1588,7 +1603,6 @@ if uploaded_file is not None:
 
             st.markdown("---")
 
-            # ── Data Summary expander ──────────────────────────────
             with st.expander("📋 Data Summary — Store → Region Mapping", expanded=False):
                 c1,c2,c3,c4 = st.columns(4)
                 c1.metric("All Delivered Orders", f"{len(all_delivered_df):,}")
@@ -1640,8 +1654,6 @@ if uploaded_file is not None:
                         st.dataframe(unknown, use_container_width=True, hide_index=True)
 
             st.markdown("---")
-
-            # ── Inline report ──────────────────────────────────────
             components.html(html_report, height=10000, scrolling=True)
 
         except Exception as e:
